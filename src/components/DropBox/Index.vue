@@ -1,11 +1,12 @@
 <template>
   <div
-    class="flex flex-col justify-center items-center gap-y-5 bg-white h-fit py-12 w-[550px] rounded-2xl drop-shadow-sm"
+    class="flex flex-col justify-center items-center gap-y-5 bg-white h-fit py-12 w-full md:w-[550px] rounded-2xl drop-shadow-sm"
   >
     <div class="flex flex-col justify-center items-center">
       <h1 class="text-xl font-semibold">Upload your photos</h1>
       <p class="text-gray-400/80 text-sm mt-1">Files should be .heic, jpg, or jpeg</p>
     </div>
+
     <div
       @dragover.prevent="dragOver"
       @dragleave="dragLeave"
@@ -23,6 +24,7 @@
         </p>
       </div>
       <input
+        id="fileInputModel"
         ref="fileInput"
         type="file"
         class="hidden"
@@ -34,137 +36,166 @@
   </div>
 </template>
 
-<script>
-import { findEXIFinHEIC } from '@/utils/exif-heic'
+<script setup>
+import { ref, defineEmits, watch } from 'vue'
+import { findEXIFinHEIC, findEXIFinJPEG } from '@/utils/exif-heic'
+import { useRoute } from 'vue-router'
 
-export default {
-  data() {
-    return {
-      isDragging: false,
-      authorizedFileTypes: '.heic,.jpeg,.jpg',
-      authorizedFileTypesArray: ['image/jpeg', 'image/jpg', 'image/heic']
+const route = useRoute()
+const emit = defineEmits(['updateProcessStatus', 'updateResults'])
+const isDragging = ref(false)
+const authorizedFileTypes = '.heic,.jpeg,.jpg'
+const authorizedFileTypesArray = ['image/jpeg', 'image/jpg', '.heic']
+const images = ref({ all: [], extractedData: [], noData: [] })
+const exifTableData = ref([])
+const showResult = ref(false)
+
+const dragOver = (event) => {
+  event.preventDefault()
+  isDragging.value = true
+}
+
+const dragLeave = () => {
+  isDragging.value = false
+}
+
+const drop = (event) => {
+  isDragging.value = false
+  const files = event.dataTransfer.files
+  handleFiles({ target: { files } })
+}
+
+const selectFiles = () => {
+  fileInput.value.click()
+}
+
+const handleFiles = (event) => {
+  backToSelectImages()
+  if (event.target.files.length > 0) {
+    const files = Array.from(event.target.files)
+    const validFiles = files.filter((file) => {
+      if (file.type) {
+        return authorizedFileTypesArray.includes(file.type)
+      } else {
+        return file.name.toLowerCase().endsWith('.heic')
+      }
+    })
+    const invalidFiles = files.length - validFiles.length
+
+    if (validFiles.length > 0) {
+      processImages(validFiles)
+
+      if (invalidFiles > 0) {
+        // alert(`${invalidFiles} files are not valid.`)
+      }
+    } else {
+      alert('None of the files are allowed.')
     }
-  },
-  methods: {
-    dragOver(event) {
-      event.preventDefault()
-      this.isDragging = true
-    },
-    dragLeave() {
-      this.isDragging = false
-    },
-    drop(event) {
-      this.isDragging = false
-      const files = event.dataTransfer.files
-      this.handleFiles({ target: { files } })
-    },
-    selectFiles() {
-      this.$refs.fileInput.click()
-    },
-    handleFiles(event) {
-      if (event.target.files.length > 0) {
-        const files = Array.from(event.target.files)
-        const validFiles = files.filter((file) => this.authorizedFileTypesArray.includes(file.type))
-        const invalidFiles = files.length - validFiles.length
-
-        if (validFiles.length > 0) {
-          if (invalidFiles > 0) {
-            alert(`${invalidFiles} files are not valid.`)
-          }
-        } else {
-          alert('None of the files are allowed.')
-        }
-
-        this.processImages(files)
-      }
-    },
-
-    backToSelectImages() {
-      this.showResult = false
-      this.images = []
-      this.exifTableData = []
-    },
-    parseGeoInfo(exifData) {
-      let result = {
-        lat: 0,
-        long: 0
-      }
-      if (exifData.GPSLatitude && exifData.GPSLatitude.length > 0) {
-        result.lat =
-          exifData.GPSLatitude[0] + exifData.GPSLatitude[1] / 60 + exifData.GPSLatitude[2] / 3600
-        if (exifData.GPSLatitudeRef === 'S') {
-          result.lat = -result.lat
-        }
-      }
-      if (exifData.GPSLongitude && exifData.GPSLongitude.length > 0) {
-        result.long =
-          exifData.GPSLongitude[0] + exifData.GPSLongitude[1] / 60 + exifData.GPSLongitude[2] / 3600
-        if (exifData.GPSLongitudeRef === 'W') {
-          result.long = -result.long
-        }
-      }
-      return result
-    },
-    processImages(files) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          let exifData = null
-          try {
-            if (file.name.toLowerCase().endsWith('.heic')) {
-              exifData = findEXIFinHEIC(e.target.result)
-            } else {
-              exifData = findEXIFinJPEG(e.target.result)
-            }
-            if (!exifData) {
-              this.$message({
-                type: 'info',
-                message: `No EXIF data found in ${file.name}`
-              })
-              reject(new Error(`No EXIF data found in ${file.name}`))
-            } else {
-              this.images.push({
-                file,
-                exifData
-              })
-              this.populateExifTableData(file.name, exifData)
-              resolve()
-            }
-          } catch (error) {
-            this.$message({
-              type: 'error',
-              message: `Error processing ${file.name}: ${error.message}`
-            })
-            reject(error)
-          }
-        }
-        reader.readAsArrayBuffer(file)
-      })
-    },
-    populateExifTableData(fileName, exifData) {
-      for (let key in exifData) {
-        let value = exifData[key]
-        if (typeof value === 'number') {
-          value = value.toString()
-        } else if (Array.isArray(value)) {
-          value = value.join(', ')
-        }
-        this.exifTableData.push({
-          fileName: fileName,
-          itemName: key,
-          itemValue: value
-        })
-      }
-    }
-    // processImages(files) {
-    //   this.showResult = true
-    // }
   }
 }
+
+const backToSelectImages = () => {
+  showResult.value = false
+  images.value = { all: [], extractedData: [], noData: [] }
+  exifTableData.value = []
+}
+
+const parseGeoInfo = (exifData) => {
+  let result = {
+    lat: 0,
+    long: 0
+  }
+  if (exifData.GPSLatitude && exifData.GPSLatitude.length > 0) {
+    result.lat =
+      exifData.GPSLatitude[0] + exifData.GPSLatitude[1] / 60 + exifData.GPSLatitude[2] / 3600
+    if (exifData.GPSLatitudeRef === 'S') {
+      result.lat = -result.lat
+    }
+  }
+  if (exifData.GPSLongitude && exifData.GPSLongitude.length > 0) {
+    result.long =
+      exifData.GPSLongitude[0] + exifData.GPSLongitude[1] / 60 + exifData.GPSLongitude[2] / 3600
+    if (exifData.GPSLongitudeRef === 'W') {
+      result.long = -result.long
+    }
+  }
+  return result
+}
+
+const processImages = (files) => {
+  showResult.value = true
+  const promises = files.map((file, index) => {
+    emit('updateProcessStatus', {
+      all: files.length,
+      processedFiles: index + 1
+    })
+    return processSingleImage(file)
+  })
+  Promise.all(promises)
+    .then(() => {
+      setTimeout(() => {
+        emit('updateResults', images.value)
+      }, 1500)
+      console.log('All files processed successfully')
+    })
+    .catch((error) => {
+      console.error('Error processing files:', error)
+    })
+}
+
+const processSingleImage = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      let exifData = null
+      try {
+        if (file.name.toLowerCase().endsWith('.heic')) {
+          exifData = findEXIFinHEIC(e.target.result)
+        } else {
+          exifData = findEXIFinJPEG(e.target.result)
+        }
+        if (!exifData) {
+          images.value.noData.push({ name: file.name })
+          images.value.all.push({ name: file.name, exifData })
+          resolve()
+        } else {
+          images.value.extractedData.push({ name: file.name, exifData })
+          images.value.all.push({ name: file.name, exifData })
+          populateExifTableData(file.name, exifData)
+          resolve()
+        }
+      } catch (error) {
+        // alert(`Error processing ${file.name}: ${error.message}`)
+        reject(error)
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+const populateExifTableData = (fileName, exifData) => {
+  for (let key in exifData) {
+    let value = exifData[key]
+    if (typeof value === 'number') {
+      value = value.toString()
+    } else if (Array.isArray(value)) {
+      value = value.join(', ')
+    }
+    exifTableData.value.push({
+      fileName: fileName,
+      itemName: key,
+      itemValue: value
+    })
+  }
+}
+
+watch(
+  () => route.query,
+  (updatedRouteQuery) => {
+    if (!Object.keys(updatedRouteQuery).length) {
+      backToSelectImages()
+    }
+  }
+)
+const fileInput = ref(null)
 </script>
-
-<style scoped>
-/* Add any custom styles here */
-</style>
-
-<!-- now I should handle multiple photos in process image -->
