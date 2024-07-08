@@ -116,7 +116,7 @@ onMounted(() => {
           </svg>
         </div>
 
-        <img v-else class="opacity-60" src="/ico-download.png" />
+        <img v-else class="w-6 h-6 opacity-90" src="/download.svg" />
       </button>
     </div>
   </div>

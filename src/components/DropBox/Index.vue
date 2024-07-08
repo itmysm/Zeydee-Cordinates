@@ -13,12 +13,12 @@
       @drop.prevent="drop"
       @click="selectFiles"
       :class="[
-        'border-2 border-dashed rounded-lg p-6 w-96 h-48 flex flex-col justify-center items-center mt-4 cursor-pointer',
+        'border-2 w-[90%] sm:w-96 border-dashed rounded-lg p-2 sm:p-6 h-48 flex flex-col justify-center items-center mt-4 cursor-pointer',
         isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-[#f4f6fe]'
       ]"
     >
       <div class="flex flex-col items-center p-4">
-        <img class="w-16 h-16" src="/ico-folder.png" alt="folder icon" />
+        <img class="w-12 h-12" src="/folder.svg" alt="folder icon" />
         <p class="mt-2 text-pink-500 text-sm font-semibold tracking-wide">
           Drag & Drop your files here
         </p>
